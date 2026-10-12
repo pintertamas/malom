@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applyMove, newGame } from '../rules';
 import { identityLabel, parseDevice } from '../notify/device';
-import { DODGE_MESSAGES, endingText, statusText } from './copy';
+import { DODGE_MESSAGES, INTRO_TEXT, endingText, statusText } from './copy';
 import { pickDodgePosition, rectsOverlap, type Rect } from './dodge';
 import { normalizeHandle } from './handle';
 
@@ -18,6 +18,14 @@ describe('statusText', () => {
     const s = newGame();
     expect(statusText(s, false)).toBe('Te jössz: tegyél le egy bábut');
     expect(statusText(applyMove(s, { type: 'place', to: 0 }), false)).toBe('Gondolkodom…');
+  });
+});
+
+describe('intro text', () => {
+  it('uses the teasing greeting', () => {
+    expect(INTRO_TEXT).toBe(
+      'Szia Enikő! Szóval szerinted nem tudlak megverni malomban? Lássuk, tényleg így van-e! ♟️',
+    );
   });
 });
 
