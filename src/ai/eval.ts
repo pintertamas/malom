@@ -4,15 +4,27 @@ import type { Position } from './engine';
 /** One piece is worth 100 units; positional terms are a few units each. */
 export const PIECE = 100;
 
-const W_MILL = 8; // closed mill (can be opened/closed again in the moving phase)
-const W_TWO = 5; // two in a line, third point empty
-const W_TWO_READY = 14; // ... and the owner can actually reach the empty point soon
-const W_ONE = 1; // one piece on an otherwise empty line
-const W_BLOCK = 4; // we sit on a line where the opponent holds the other two
-const W_MOB = 3; // per available slide
-const FLY_MOB = 9; // flying pieces are never stuck: counts as this many slides
-const W_RUN = 35; // "running mill": a piece that can swing between two mills
-const W_FLY_KEEP = 15; // flying is a strong defensive/offensive resource
+/** Evaluation weights (units: 100 = one piece). Mutable so tests can A/B-tune them. */
+export const WEIGHTS = {
+  /** closed mill (can be opened/closed again in the moving phase) */
+  W_MILL: 8,
+  /** two in a line, third point empty */
+  W_TWO: 5,
+  /** ... and the owner can actually reach the empty point soon */
+  W_TWO_READY: 14,
+  /** one piece on an otherwise empty line */
+  W_ONE: 1,
+  /** we sit on a line where the opponent holds the other two */
+  W_BLOCK: 4,
+  /** per available slide */
+  W_MOB: 3,
+  /** flying pieces are never stuck: counts as this many slides */
+  FLY_MOB: 9,
+  /** "running mill": a piece that can swing between two mills */
+  W_RUN: 35,
+  /** flying is a strong defensive/offensive resource */
+  W_FLY_KEEP: 15,
+};
 
 /** Pieces owned by `p` (on board plus still to place). */
 export function pieces(pos: Position, p: number): number {
@@ -42,31 +54,31 @@ export function positional(pos: Position, p: number): number {
       else empty = pt;
     }
     if (own === 3) {
-      s += W_MILL;
+      s += WEIGHTS.W_MILL;
     } else if (own === 2 && opp === 0) {
-      s += W_TWO;
+      s += WEIGHTS.W_TWO;
       if (placing || flying) {
-        s += W_TWO_READY;
+        s += WEIGHTS.W_TWO_READY;
       } else {
         // can a piece that is not on this line step into the empty point?
         const n = ADJ_N[empty] as number;
         for (let k = 0; k < n; k++) {
           const nb = ADJ_P[empty * 4 + k] as number;
           if (b[nb] === p && nb !== a && nb !== m && nb !== c) {
-            s += W_TWO_READY;
+            s += WEIGHTS.W_TWO_READY;
             break;
           }
         }
       }
     } else if (own === 1 && opp === 0) {
-      s += W_ONE;
+      s += WEIGHTS.W_ONE;
     } else if (own === 1 && opp === 2) {
-      s += W_BLOCK;
+      s += WEIGHTS.W_BLOCK;
     }
   }
 
   if (flying) {
-    s += W_MOB * FLY_MOB + W_FLY_KEEP;
+    s += WEIGHTS.W_MOB * WEIGHTS.FLY_MOB + WEIGHTS.W_FLY_KEEP;
   } else {
     let mob = 0;
     for (let pt = 0; pt < 24; pt++) {
@@ -88,12 +100,12 @@ export function positional(pos: Position, p: number): number {
               if (z === pt) onLine = true;
               else if (z !== y && b[z] === p) ok++;
             }
-            if (!onLine && ok === 2) s += W_RUN;
+            if (!onLine && ok === 2) s += WEIGHTS.W_RUN;
           }
         }
       }
     }
-    s += W_MOB * mob;
+    s += WEIGHTS.W_MOB * mob;
   }
   return s;
 }
