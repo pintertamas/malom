@@ -1,12 +1,18 @@
 import { AiClient } from '../ai';
+import { notifyMilestone, session } from '../notify';
 import { applyMove, legalMoves, newGame } from '../rules';
 import type { GameState, Move, Player } from '../rules';
+import { aiOptionsFor } from './aiLevel';
 import { BoardView, completeMills } from './boardView';
 import { statusText } from './copy';
 import { delay, h } from './dom';
+import { getLevel, levelSelector } from './level';
+import { MilestoneTracker, milestoneText } from './milestones';
 
 export interface GameHooks {
-  onEnd(state: GameState, moves: number): void;
+  gameNo: number;
+  onEnd(state: GameState, moves: number, durationMs: number): void;
+  onNew(): void;
 }
 
 function counters(label: string, cls: string): { el: HTMLElement; set(toPlace: number, onBoard: number): void } {
@@ -20,14 +26,26 @@ function counters(label: string, cls: string): { el: HTMLElement; set(toPlace: n
   };
 }
 
-export function mountGame(root: HTMLElement, hooks: GameHooks): void {
+export function mountGame(root: HTMLElement, hooks: GameHooks): { destroy(): void } {
   const ai = new AiClient();
   const board = new BoardView();
   const status = h('p', 'status');
   status.setAttribute('aria-live', 'polite');
   const top = counters('Én', 'dark');
   const bottom = counters('Te', 'white');
-  const screen = h('main', 'screen game', undefined, top.el, status, h('div', 'board-wrap', undefined, board.el), bottom.el);
+  const newBtn = h('button', 'btn-small', 'Új játék');
+  newBtn.type = 'button';
+  const header = h('div', 'game-header', undefined, levelSelector(), newBtn);
+  const screen = h(
+    'main',
+    'screen game',
+    undefined,
+    header,
+    top.el,
+    status,
+    h('div', 'board-wrap', undefined, board.el),
+    bottom.el,
+  );
   root.replaceChildren(screen);
 
   let state = newGame();
@@ -37,7 +55,20 @@ export function mountGame(root: HTMLElement, hooks: GameHooks): void {
   let over = false;
   let moveCount = 0;
   let knownMills = new Set<string>();
+  const tracker = new MilestoneTracker();
+  const startedAt = Date.now();
   board.syncBoard(state.board);
+
+  newBtn.addEventListener('click', () => {
+    if (!over && moveCount > 0 && !window.confirm('Biztos új játékot kezdesz?')) return;
+    destroy();
+    hooks.onNew();
+  });
+
+  function destroy(): void {
+    over = true;
+    ai.terminate();
+  }
 
   function refresh(): void {
     const legal = !busy && !over && state.turn === 0 ? legalMoves(state) : [];
@@ -68,11 +99,15 @@ export function mountGame(root: HTMLElement, hooks: GameHooks): void {
     state = applyMove(state, move);
     board.animate(move, player);
     if (move.type !== 'remove') moveCount++;
+    session.moves = moveCount;
+    for (const key of tracker.onMove(player, move, state)) {
+      notifyMilestone(milestoneText(key), hooks.gameNo);
+    }
     selected = null;
     if (state.result && !over) {
       over = true;
       refresh();
-      hooks.onEnd(state, moveCount);
+      hooks.onEnd(state, moveCount, Date.now() - startedAt);
       ai.terminate();
       return;
     }
@@ -87,19 +122,19 @@ export function mountGame(root: HTMLElement, hooks: GameHooks): void {
       const pace = delay(500 + Math.random() * 300);
       let move: Move | undefined;
       try {
-        move = await ai.choose(state);
+        move = await ai.choose(state, aiOptionsFor(getLevel()));
         applyMove(state, move); // validate; throws if illegal
       } catch {
         const all = legalMoves(state);
         move = all[Math.floor(Math.random() * all.length)];
       }
       await pace;
-      if (!move) break;
+      if (!move || over) break;
       play(move);
     }
     busy = false;
     thinking = false;
-    refresh();
+    if (!over) refresh();
   }
 
   board.setHandler((p) => {
@@ -134,4 +169,5 @@ export function mountGame(root: HTMLElement, hooks: GameHooks): void {
   }
 
   refresh();
+  return { destroy };
 }

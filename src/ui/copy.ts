@@ -11,6 +11,15 @@ export function endingText(result: GameResult): string {
   return 'Döntetlen, szóval inkább játsszunk egy visszavágót élőben! ☕';
 }
 
+/** Short result card text for games after the date question was already asked. */
+export function resultCardText(result: GameResult): string {
+  if (result.winner === 0) return 'Nyertél! 🏆';
+  if (result.winner === 1) return 'Ezúttal én nyertem 😏';
+  return 'Döntetlen!';
+}
+
+export const PRACTICE_TEXT = 'Addig is itt tudsz gyakorolni.';
+
 export function statusText(state: GameState, thinking: boolean): string {
   if (state.result) return 'Vége a játéknak';
   if (thinking || state.turn === 1) return 'Gondolkodom…';
