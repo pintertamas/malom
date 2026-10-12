@@ -3,6 +3,8 @@ import { DODGE_MESSAGES } from './copy';
 import { distanceToRect, pickDodgePosition } from './dodge';
 import type { Rect } from './dodge';
 import { h } from './dom';
+import { popBubble, puff } from './fx';
+import { EASE, MOTION, Scope } from './motion';
 
 const NEAR_PX = 90;
 const COUNT_GAP_MS = 300;
@@ -32,19 +34,44 @@ export function createDodgeButton(igen: HTMLElement, bubble: HTMLElement): Dodge
   let messageIdx = 0;
   let hideTimer: number | undefined;
   let hidden = false;
+  let settled = false; // the card's entrance animation has finished; the slot is at rest
+  let shown = false;
+  let lastPuff = 0;
+  const scope = new Scope();
 
   const setPos = (x: number, y: number): void => {
     button.style.transform = `translate3d(${x}px, ${y}px, 0)`;
   };
+  const pop = (): void => {
+    scope.play(
+      button,
+      [
+        { scale: 0.4, opacity: 0 },
+        { scale: 1.12, opacity: 1, offset: 0.65 },
+        { scale: 1, opacity: 1 },
+      ],
+      { duration: MOTION.nemPopMs, easing: EASE.out },
+    );
+  };
   const home = (): void => {
-    if (moved) return;
+    if (moved || !settled || hidden) return;
     const r = rectOf(slot);
     setPos(r.x, r.y);
     button.style.visibility = 'visible';
+    if (!shown) {
+      shown = true;
+      pop();
+    }
+  };
+  const burst = (...rects: Rect[]): void => {
+    const now = Date.now();
+    if (now - lastPuff < MOTION.puffMinGapMs) return;
+    lastPuff = now;
+    for (const r of rects) puff(scope, r.x + r.w / 2, r.y + r.h / 2);
   };
 
   const dodge = (): void => {
-    if (hidden) return;
+    if (hidden || !settled) return;
     const size = { w: button.offsetWidth, h: button.offsetHeight };
     const pos = pickDodgePosition({
       viewport: { w: window.innerWidth, h: window.innerHeight },
@@ -53,8 +80,11 @@ export function createDodgeButton(igen: HTMLElement, bubble: HTMLElement): Dodge
       soft: [rectOf(button)],
       rng: Math.random,
     });
+    const from = rectOf(button);
     moved = true;
     setPos(pos.x, pos.y);
+    burst(from, { x: pos.x, y: pos.y, w: size.w, h: size.h });
+    pop();
     const now = Date.now();
     if (now - lastCount >= COUNT_GAP_MS) {
       lastCount = now;
@@ -62,6 +92,7 @@ export function createDodgeButton(igen: HTMLElement, bubble: HTMLElement): Dodge
       bubble.textContent = DODGE_MESSAGES[messageIdx % DODGE_MESSAGES.length] ?? '';
       messageIdx++;
       bubble.classList.add('show');
+      popBubble(scope, bubble);
       window.clearTimeout(hideTimer);
       hideTimer = window.setTimeout(() => bubble.classList.remove('show'), 3500);
     }
@@ -86,7 +117,7 @@ export function createDodgeButton(igen: HTMLElement, bubble: HTMLElement): Dodge
   button.addEventListener('keydown', stop);
 
   const near = (x: number, y: number): void => {
-    if (!hidden && distanceToRect(x, y, rectOf(button)) < NEAR_PX) dodge();
+    if (!hidden && settled && distanceToRect(x, y, rectOf(button)) < NEAR_PX) dodge();
   };
   const onPointer = (e: PointerEvent): void => {
     if (!handled.has(e)) near(e.clientX, e.clientY);
@@ -111,13 +142,19 @@ export function createDodgeButton(igen: HTMLElement, bubble: HTMLElement): Dodge
   window.addEventListener('orientationchange', onResize);
   // Settle over the placeholder: layout, fonts, the card's rise animation, any later resize.
   const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(home);
-  const onAnimEnd = (): void => home();
-  requestAnimationFrame(() => {
+  const settle = (): void => {
+    if (settled) return;
+    settled = true;
     home();
-    requestAnimationFrame(home);
+  };
+  requestAnimationFrame(() => {
+    const card = slot.closest('.card');
+    const running = (card?.getAnimations?.() ?? []).filter((a) => a.pending || a.playState === 'running');
+    if (running.length === 0) settle();
+    else void Promise.allSettled(running.map((a) => a.finished)).then(settle);
+    scope.timeout(settle, MOTION.cardInMs + 250); // safety net
     ro?.observe(slot);
     ro?.observe(document.body);
-    slot.closest('.card')?.addEventListener('animationend', onAnimEnd);
   });
   void document.fonts?.ready.then(home);
 
@@ -136,6 +173,7 @@ export function createDodgeButton(igen: HTMLElement, bubble: HTMLElement): Dodge
       window.removeEventListener('resize', onResize);
       window.removeEventListener('orientationchange', onResize);
       ro?.disconnect();
+      scope.dispose();
       button.remove();
     },
   };
