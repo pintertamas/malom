@@ -7,6 +7,8 @@
   --cream: #f6ead2;
   --accent: #e8a75a;
   --rose: #c8324b;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   color: var(--cream);
   color-scheme: dark;
@@ -33,8 +35,18 @@ body {
   -webkit-touch-callout: none;
 }
 
+/* Screens overlap in one grid cell so an old screen can fade out under the new one. */
 #app {
+  position: relative;
+  z-index: 1;
   height: 100dvh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
+}
+
+#app > * {
+  grid-area: 1 / 1;
 }
 
 .screen {
@@ -52,7 +64,78 @@ body {
   justify-content: center;
 }
 
+/* subtle living background */
+.bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.blob {
+  position: absolute;
+  width: 90vmax;
+  height: 90vmax;
+  border-radius: 50%;
+  will-change: transform;
+}
+
+.blob.a {
+  left: -35vmax;
+  top: -40vmax;
+  background: radial-gradient(circle, rgba(232, 167, 90, 0.16), rgba(232, 167, 90, 0) 62%);
+  animation: drift-a 48s ease-in-out infinite alternate;
+}
+
+.blob.b {
+  right: -40vmax;
+  bottom: -45vmax;
+  background: radial-gradient(circle, rgba(200, 50, 75, 0.14), rgba(200, 50, 75, 0) 62%);
+  animation: drift-b 60s ease-in-out infinite alternate;
+}
+
+.mote {
+  position: absolute;
+  bottom: -10px;
+  border-radius: 50%;
+  background: rgba(255, 224, 170, 0.5);
+  opacity: 0;
+  animation: float-up linear infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes drift-a {
+  to {
+    transform: translate3d(22vmax, 16vmax, 0) scale(1.15);
+  }
+}
+
+@keyframes drift-b {
+  to {
+    transform: translate3d(-20vmax, -14vmax, 0) scale(1.1);
+  }
+}
+
+@keyframes float-up {
+  0% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.55;
+  }
+  85% {
+    opacity: 0.35;
+  }
+  100% {
+    transform: translate3d(var(--drift, 20px), -105dvh, 0);
+    opacity: 0;
+  }
+}
+
 .card {
+  position: relative;
   width: min(100%, 420px);
   background: rgba(255, 240, 215, 0.07);
   border: 1px solid rgba(255, 220, 170, 0.18);
@@ -61,7 +144,22 @@ body {
   text-align: center;
   backdrop-filter: blur(6px);
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.4);
-  animation: rise 0.5s ease both;
+  animation: cardIn 0.7s cubic-bezier(0.34, 1.45, 0.64, 1) both;
+}
+
+.card.win {
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.4), 0 0 46px rgba(255, 217, 138, 0.16);
+}
+
+.intro-board {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 18px;
+}
+
+.board.decor {
+  width: min(62vw, 250px, 30dvh);
+  pointer-events: none;
 }
 
 .intro-text,
@@ -77,7 +175,42 @@ body {
   margin: 0 0 22px;
 }
 
+/* staged entrance (translate/opacity only, so it composes with other transforms) */
+.stage {
+  animation: stageIn 0.65s var(--ease-out) var(--d, 0s) backwards;
+}
+
+.game > * {
+  animation: stageIn 0.55s var(--ease-out) backwards;
+}
+
+.game > :nth-child(2) {
+  animation-delay: 60ms;
+}
+
+.game > :nth-child(3) {
+  animation-delay: 120ms;
+}
+
+.game > :nth-child(4) {
+  animation-delay: 160ms;
+}
+
+.game > :nth-child(5) {
+  animation-delay: 220ms;
+}
+
+/* buttons */
+button {
+  transition: scale 0.14s var(--ease-out), translate 0.14s var(--ease-out);
+}
+
+button:active {
+  scale: 0.96;
+}
+
 .btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -96,12 +229,33 @@ body {
 }
 
 .btn:active {
-  transform: translateY(2px);
+  translate: 0 2px;
 }
 
 .btn.big {
   min-height: 60px;
   font-size: 1.25rem;
+}
+
+/* gently pulsing call to action (never used on the dodging Nem button) */
+.btn.glow {
+  animation: btnPulse 2.4s ease-in-out 0.8s infinite;
+}
+
+.btn.glow.stage {
+  animation: stageIn 0.65s var(--ease-out) var(--d, 0s) backwards,
+    btnPulse 2.4s ease-in-out calc(var(--d, 0s) + 0.9s) infinite;
+}
+
+.btn.glow::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 19px;
+  border: 2px solid rgba(255, 224, 160, 0.9);
+  opacity: 0;
+  pointer-events: none;
+  animation: btnRing 2.4s ease-out 0.8s infinite;
 }
 
 .btn.no {
@@ -113,6 +267,11 @@ body {
   background: linear-gradient(180deg, #6b5a52, #4c3d36);
   box-shadow: 0 5px 0 #2e241f, 0 10px 18px rgba(0, 0, 0, 0.35);
   will-change: transform;
+}
+
+.btn.no:active {
+  scale: 1;
+  translate: none;
 }
 
 .btn.ghost {
@@ -145,11 +304,33 @@ body {
 }
 
 .counter {
+  position: relative;
   width: min(100%, 440px);
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 4px 10px;
   font-size: 0.95rem;
+}
+
+.counter::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  box-shadow: 0 0 0 1px rgba(255, 217, 138, 0.55), 0 0 18px rgba(255, 190, 90, 0.28);
+  background: rgba(255, 217, 138, 0.06);
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+}
+
+.counter.active::after {
+  opacity: 1;
+}
+
+.counter.active .chip {
+  animation: chipPulse 1.3s ease-in-out infinite;
 }
 
 .counter .count-text {
@@ -177,10 +358,52 @@ body {
   min-height: 2.8em;
   display: flex;
   align-items: center;
+  justify-content: center;
+  gap: 8px;
   text-align: center;
   font-size: 1.1rem;
   font-weight: 600;
   line-height: 1.3;
+}
+
+/* mirrors the dots' width so the text stays visually centred */
+.status::before {
+  content: '';
+  flex: none;
+  width: 28px;
+}
+
+.status-text {
+  display: block;
+}
+
+.dots {
+  flex: none;
+  width: 28px;
+  display: inline-flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+
+.status.thinking .dots {
+  opacity: 1;
+}
+
+.dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: dot 1s ease-in-out infinite;
+}
+
+.dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.dots i:nth-child(3) {
+  animation-delay: 0.3s;
 }
 
 .board-wrap {
@@ -193,9 +416,10 @@ body {
 }
 
 .board {
-  width: min(100%, 460px, 100dvh - 250px);
+  width: min(100%, 460px, 100dvh - 270px);
   aspect-ratio: 1;
   touch-action: manipulation;
+  overflow: visible; /* pieces drop in from above the board */
 }
 
 .board-bg {
@@ -211,6 +435,12 @@ body {
   stroke-width: 3;
 }
 
+/* groups/shapes that scale or rotate around their own centre */
+.board :is(.pt, .pop, .drop, .lift, .shadow, .ripple, .flash, .glow-ring, .ghost) {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
 .pt {
   fill: var(--line);
   transition: fill 0.2s;
@@ -221,8 +451,6 @@ body {
   stroke: #fff4cf;
   stroke-width: 3;
   animation: pulse 1.1s ease-in-out infinite;
-  transform-box: fill-box;
-  transform-origin: center;
 }
 
 .hit {
@@ -230,17 +458,30 @@ body {
 }
 
 .piece {
-  transition: transform 0.38s cubic-bezier(0.3, 0.8, 0.3, 1);
   pointer-events: none;
+}
+
+.piece .shadow {
+  fill: rgba(0, 0, 0, 0.38);
+  transition: transform 0.2s var(--ease-out);
+}
+
+.piece.selected .shadow {
+  transform: translate(3px, 9px) scale(0.8);
 }
 
 .piece .body {
   stroke: rgba(0, 0, 0, 0.45);
   stroke-width: 1.5;
-  filter: drop-shadow(0 3px 2px rgba(0, 0, 0, 0.45));
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: pop 0.35s ease-out both;
+}
+
+.piece .shine {
+  fill: #fff;
+  opacity: 0.35;
+}
+
+.piece .body.dark + .shine {
+  opacity: 0.16;
 }
 
 .piece.selectable .body {
@@ -258,8 +499,43 @@ body {
   stroke-width: 4;
 }
 
-.piece.captured .body {
-  animation: out 0.45s ease-in forwards;
+/* selected piece: lifted (static base, so reduced motion keeps it) with an idle wobble */
+.piece.selected .lift {
+  transform: translateY(-7px) scale(1.12);
+  animation: lift 0.18s var(--ease-out), wobble 1.4s ease-in-out 0.18s infinite;
+}
+
+.piece.selectable:not(.selected) {
+  animation: breathe 1.3s ease-in-out infinite;
+}
+
+/* enemy pieces she may take pulse */
+.piece.removable .lift {
+  animation: threat 0.85s ease-in-out infinite;
+}
+
+.ripple {
+  fill: none;
+  stroke: rgba(255, 244, 207, 0.9);
+  stroke-width: 2.5;
+}
+
+.flash {
+  fill: rgba(255, 60, 80, 0.7);
+}
+
+.glow-ring {
+  fill: none;
+  stroke: #ffe28a;
+  stroke-width: 3;
+}
+
+.sweep {
+  fill: none;
+  stroke: #fff0b8;
+  stroke-width: 9;
+  stroke-linecap: round;
+  opacity: 0.95;
 }
 
 .mill {
@@ -276,10 +552,6 @@ body {
   stroke: #1a1220;
 }
 
-.mill.fresh {
-  animation: flash 0.9s ease-out;
-}
-
 /* modal */
 .backdrop {
   position: fixed;
@@ -290,6 +562,12 @@ body {
   justify-content: center;
   padding: 16px;
   background: rgba(10, 5, 2, 0.72);
+  transition: opacity 0.6s;
+  animation: fadeIn 0.35s ease both;
+}
+
+.backdrop.fade-out {
+  opacity: 0;
 }
 
 .modal-form {
@@ -345,6 +623,51 @@ body {
   font-size: 1.5rem;
 }
 
+/* end-screen effects */
+.confetti {
+  position: fixed;
+  inset: 0;
+  z-index: 65;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.confetto {
+  position: absolute;
+  border-radius: 2px;
+  will-change: transform, opacity;
+}
+
+.confetto.round {
+  border-radius: 50%;
+}
+
+.sparkle {
+  position: absolute;
+  background: #ffe9a8;
+  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+  pointer-events: none;
+  opacity: 0;
+}
+
+.puff-cloud {
+  position: fixed;
+  z-index: 55;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 240, 215, 0.75), rgba(255, 240, 215, 0) 70%);
+  pointer-events: none;
+}
+
+.puff-dot {
+  position: fixed;
+  z-index: 55;
+  border-radius: 50%;
+  background: rgba(238, 224, 204, 0.85);
+  pointer-events: none;
+}
+
 /* roses */
 .rain {
   position: fixed;
@@ -366,6 +689,13 @@ body {
   animation: sway ease-in-out infinite alternate;
 }
 
+.petal {
+  display: block;
+  border-radius: 100% 0 100% 0;
+  opacity: 0.85;
+  animation: petalSway ease-in-out infinite alternate;
+}
+
 .rose.static {
   animation: none;
   font-size: 34px;
@@ -382,30 +712,38 @@ body {
 
 @keyframes sway {
   from {
-    transform: translateX(calc(var(--sway) * -1)) rotate(-18deg);
+    transform: translateX(calc(var(--sway) * -1)) rotate(calc(var(--spin, 18deg) * -1));
   }
   to {
-    transform: translateX(var(--sway)) rotate(18deg);
+    transform: translateX(var(--sway)) rotate(var(--spin, 18deg));
   }
 }
 
-@keyframes rise {
+@keyframes petalSway {
   from {
-    opacity: 0;
-    transform: translateY(14px);
+    transform: translateX(calc(var(--sway) * -1)) rotate(-50deg) rotateX(0deg);
   }
-}
-
-@keyframes pop {
-  from {
-    transform: scale(0.2);
-    opacity: 0;
-  }
-}
-
-@keyframes out {
   to {
-    transform: scale(0.1);
+    transform: translateX(var(--sway)) rotate(50deg) rotateX(75deg);
+  }
+}
+
+@keyframes cardIn {
+  from {
+    opacity: 0;
+    transform: translateY(46px) scale(0.94);
+  }
+}
+
+@keyframes stageIn {
+  from {
+    opacity: 0;
+    translate: 0 16px;
+  }
+}
+
+@keyframes fadeIn {
+  from {
     opacity: 0;
   }
 }
@@ -416,27 +754,75 @@ body {
   }
 }
 
-@keyframes glow {
-  50% {
-    stroke-width: 5;
-  }
-}
-
-@keyframes flash {
-  from {
-    opacity: 0;
-    stroke-width: 16;
-  }
-}
-
-.piece.selectable:not(.selected),
-.piece.removable {
-  animation: breathe 1.1s ease-in-out infinite;
-}
-
 @keyframes breathe {
   50% {
-    opacity: 0.6;
+    opacity: 0.62;
+  }
+}
+
+@keyframes lift {
+  from {
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes wobble {
+  0%,
+  100% {
+    transform: translateY(-7px) scale(1.12) rotate(0deg);
+  }
+  25% {
+    transform: translateY(-9px) scale(1.14) rotate(-5deg);
+  }
+  75% {
+    transform: translateY(-9px) scale(1.14) rotate(5deg);
+  }
+}
+
+@keyframes threat {
+  50% {
+    transform: scale(1.14);
+  }
+}
+
+@keyframes dot {
+  0%,
+  70%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  35% {
+    transform: translateY(-5px);
+    opacity: 1;
+  }
+}
+
+@keyframes chipPulse {
+  50% {
+    transform: scale(1.3);
+  }
+}
+
+@keyframes btnPulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.045);
+  }
+}
+
+@keyframes btnRing {
+  0% {
+    transform: scale(0.96);
+    opacity: 0.8;
+  }
+  70%,
+  100% {
+    transform: scale(1.18, 1.35);
+    opacity: 0;
   }
 }
 
@@ -446,6 +832,7 @@ body {
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+    animation-delay: 0s !important;
     transition-duration: 0.01ms !important;
   }
 }
@@ -459,6 +846,7 @@ body {
 }
 
 .segmented {
+  position: relative;
   display: flex;
   flex: 1;
   min-width: 0;
@@ -468,7 +856,27 @@ body {
   gap: 2px;
 }
 
+/* sliding highlight: 3 equal segments, offset by --i */
+.seg-thumb {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc((100% - 10px) / 3);
+  border-radius: 9px;
+  background: var(--accent);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  transform: translateX(calc(var(--i, 0) * (100% + 2px)));
+  pointer-events: none;
+}
+
+.segmented.ready .seg-thumb {
+  transition: transform 0.34s cubic-bezier(0.34, 1.35, 0.5, 1);
+}
+
 .seg {
+  position: relative;
+  z-index: 1;
   flex: 1;
   min-height: 40px;
   padding: 0 4px;
@@ -479,10 +887,10 @@ body {
   font: inherit;
   font-size: 0.9rem;
   opacity: 0.8;
+  transition: color 0.25s, opacity 0.25s, scale 0.14s var(--ease-out), translate 0.14s var(--ease-out);
 }
 
 .seg.on {
-  background: var(--accent);
   color: #2a1a10;
   font-weight: 700;
   opacity: 1;
@@ -518,12 +926,4 @@ body {
 
 .level-row {
   margin-top: 18px;
-}
-
-.backdrop {
-  transition: opacity 0.6s;
-}
-
-.backdrop.fade-out {
-  opacity: 0;
 }
