@@ -109,7 +109,7 @@ function openModal(screen: HTMLElement, dodge: DodgeButton, onAgain: () => void)
     'div',
     'card modal',
     undefined,
-    h('p', 'end-text', 'Szuper! 🎉 Mi az Instagram neved, hogy tudjak írni?'),
+    h('p', 'end-text', 'Szuper! 🎉 Mi az Instagram neved, hogy ott tudjak írni?'),
     form,
   );
   const backdrop = h('div', 'backdrop', undefined, modal);
@@ -125,7 +125,7 @@ function openModal(screen: HTMLElement, dodge: DodgeButton, onAgain: () => void)
     }
     submitHandle(handle);
     dodge.destroy();
-    modal.replaceChildren(h('p', 'end-text thanks', 'Köszi! Hamarosan írok neked 🌹'));
+    modal.replaceChildren(h('p', 'end-text thanks', 'Köszi! Hamarosan ott írok neked 🌹'));
     startRoseRain();
     setTimeout(() => {
       backdrop.classList.add('fade-out');
