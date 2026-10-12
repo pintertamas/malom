@@ -4,15 +4,18 @@ import { DATE_QUESTION, PRACTICE_TEXT, endingText, resultCardText } from './copy
 import { h } from './dom';
 import { createDodgeButton } from './dodgeButton';
 import type { DodgeButton } from './dodgeButton';
+import { confettiBurst, sparkles, swapScreen } from './fx';
 import { normalizeHandle } from './handle';
+import { markHandleSubmitted } from './handleFlag';
 import { levelSelector } from './level';
+import { EASE, MOTION, Scope } from './motion';
 import { startRoseRain } from './roseRain';
 
 const THANKS_MS = 5000;
 
 export interface EndOptions {
   gameNo: number;
-  /** Show the Igen/Nem date question (only the very first finished game). */
+  /** Show the Igen/Nem date question (every finished game until her handle was submitted). */
   ask: boolean;
   onAgain(): void;
 }
@@ -24,31 +27,84 @@ function newGameButton(onAgain: () => void, big: boolean): HTMLButtonElement {
   return b;
 }
 
-/** Mounts the end screen; returns a cleanup that removes the floating Nem button. */
+type Outcome = 'win' | 'lose' | 'draw';
+
+function outcomeOf(result: GameResult): Outcome {
+  return result.winner === 0 ? 'win' : result.winner === 1 ? 'lose' : 'draw';
+}
+
+/** Result-specific flourish once the card has landed: confetti, a cheeky shrug or sparkles. */
+function flourish(scope: Scope, card: HTMLElement, outcome: Outcome): void {
+  scope.timeout(() => {
+    const text = card.querySelector<HTMLElement>('.end-text');
+    if (outcome === 'win') {
+      confettiBurst(scope);
+      if (text) {
+        scope.play(
+          text,
+          [{ transform: 'scale(1)' }, { transform: 'scale(1.1)', offset: 0.4 }, { transform: 'scale(1)' }],
+          { duration: 600, easing: EASE.spring },
+        );
+      }
+    } else if (outcome === 'lose') {
+      if (text) {
+        scope.play(
+          text,
+          [
+            { transform: 'none', offset: 0 },
+            { transform: 'translateY(-7px) scale(1.04)', offset: 0.18 },
+            { transform: 'translateY(0) rotate(-2.5deg) scaleY(0.95)', offset: 0.34 },
+            { transform: 'rotate(2.5deg)', offset: 0.52 },
+            { transform: 'rotate(-1.5deg)', offset: 0.7 },
+            { transform: 'rotate(1deg)', offset: 0.86 },
+            { transform: 'none', offset: 1 },
+          ],
+          { duration: 1200, easing: 'ease-in-out' },
+          'skip',
+        );
+      }
+    } else {
+      sparkles(scope, card);
+      if (text) {
+        scope.play(
+          text,
+          [{ transform: 'scale(1)' }, { transform: 'scale(1.04)', offset: 0.5 }, { transform: 'scale(1)' }],
+          { duration: 1400, iterations: 2, easing: EASE.inOut },
+          'skip',
+        );
+      }
+    }
+  }, MOTION.endFlourishDelayMs + MOTION.cardInMs * 0.5);
+}
+
+/** Mounts the end screen; returns a cleanup that removes the floating Nem button and any effects. */
 export function mountEnd(root: HTMLElement, result: GameResult, opts: EndOptions): () => void {
   notifyEndCard(opts.gameNo);
+  const scope = new Scope();
+  const outcome = outcomeOf(result);
   if (!opts.ask) {
     const card = h(
       'section',
-      'card end-card',
+      `card end-card ${outcome}`,
       undefined,
       h('p', 'end-text', resultCardText(result)),
       newGameButton(opts.onAgain, true),
       h('div', 'level-row', undefined, levelSelector()),
     );
-    root.replaceChildren(h('main', 'screen end', undefined, card));
-    return () => {};
+    swapScreen(root, h('main', 'screen end', undefined, card), { slide: false });
+    flourish(scope, card, outcome);
+    return () => scope.dispose();
   }
 
   const bubble = h('p', 'bubble');
   bubble.setAttribute('aria-live', 'polite');
-  const igen = h('button', 'btn yes', 'Igen');
+  const igen = h('button', 'btn yes glow', 'Igen');
   igen.type = 'button';
   const dodge: DodgeButton = createDodgeButton(igen, bubble);
   const row = h('div', 'btn-row', undefined, igen, dodge.slot);
   const card = h(
     'section',
-    'card end-card',
+    `card end-card ${outcome}`,
     undefined,
     h('p', 'end-text', endingText(result)),
     h('p', 'end-q', DATE_QUESTION),
@@ -57,16 +113,20 @@ export function mountEnd(root: HTMLElement, result: GameResult, opts: EndOptions
     bubble,
   );
   const screen = h('main', 'screen end', undefined, card);
-  root.replaceChildren(screen);
+  swapScreen(root, screen, { slide: false });
   document.body.append(dodge.button);
+  flourish(scope, card, outcome);
 
   igen.addEventListener('click', () => {
     notifyIgen();
     dodge.hide();
     bubble.classList.remove('show');
-    openModal(screen, dodge, opts.onAgain);
+    openModal(screen, dodge, opts.onAgain, scope);
   });
-  return () => dodge.destroy();
+  return () => {
+    dodge.destroy();
+    scope.dispose();
+  };
 }
 
 function showPractice(screen: HTMLElement, onAgain: () => void): void {
@@ -82,7 +142,7 @@ function showPractice(screen: HTMLElement, onAgain: () => void): void {
   screen.replaceChildren(card);
 }
 
-function openModal(screen: HTMLElement, dodge: DodgeButton, onAgain: () => void): void {
+function openModal(screen: HTMLElement, dodge: DodgeButton, onAgain: () => void, scope: Scope): void {
   const input = h('input', 'handle-input');
   input.type = 'text';
   input.placeholder = 'felhasználónév';
@@ -114,22 +174,35 @@ function openModal(screen: HTMLElement, dodge: DodgeButton, onAgain: () => void)
   );
   const backdrop = h('div', 'backdrop', undefined, modal);
   screen.append(backdrop);
-  setTimeout(() => input.focus({ preventScroll: true }), 150);
+  scope.timeout(() => input.focus({ preventScroll: true }), 150);
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     const handle = normalizeHandle(input.value);
     if (!handle) {
       error.textContent = 'Ez nem tűnik érvényes névnek';
+      scope.play(
+        error,
+        [{ transform: 'translateX(0)' }, { transform: 'translateX(-6px)' }, { transform: 'translateX(6px)' }, { transform: 'translateX(0)' }],
+        { duration: 260 },
+        'skip',
+      );
       return;
     }
     submitHandle(handle);
+    markHandleSubmitted();
     dodge.destroy();
     modal.replaceChildren(h('p', 'end-text thanks', 'Köszi! Hamarosan ott írok neked 🌹'));
-    startRoseRain();
-    setTimeout(() => {
+    scope.play(
+      modal,
+      [{ transform: 'scale(0.94)' }, { transform: 'scale(1.03)', offset: 0.5 }, { transform: 'scale(1)' }],
+      { duration: 480, easing: EASE.out },
+      'skip',
+    );
+    startRoseRain(scope);
+    scope.timeout(() => {
       backdrop.classList.add('fade-out');
-      setTimeout(() => {
+      scope.timeout(() => {
         showPractice(screen, onAgain);
       }, 600);
     }, THANKS_MS);
