@@ -6,8 +6,10 @@ import { aiOptionsFor } from './aiLevel';
 import { BoardView, completeMills } from './boardView';
 import { statusText } from './copy';
 import { delay, h } from './dom';
+import { swapScreen } from './fx';
 import { getLevel, levelSelector } from './level';
 import { MilestoneTracker, milestoneText } from './milestones';
+import { EASE, MOTION, Scope } from './motion';
 
 export interface GameHooks {
   gameNo: number;
@@ -15,7 +17,10 @@ export interface GameHooks {
   onNew(): void;
 }
 
-function counters(label: string, cls: string): { el: HTMLElement; set(toPlace: number, onBoard: number): void } {
+function counters(
+  label: string,
+  cls: string,
+): { el: HTMLElement; set(toPlace: number, onBoard: number): void; active(on: boolean): void } {
   const text = h('span', 'count-text');
   const el = h('div', 'counter', undefined, h('span', `chip ${cls}`), h('strong', undefined, label), text);
   return {
@@ -23,13 +28,20 @@ function counters(label: string, cls: string): { el: HTMLElement; set(toPlace: n
     set(toPlace, onBoard) {
       text.textContent = `lerakandó: ${toPlace} · táblán: ${onBoard}`;
     },
+    active(on) {
+      el.classList.toggle('active', on);
+    },
   };
 }
 
 export function mountGame(root: HTMLElement, hooks: GameHooks): { destroy(): void } {
   const ai = new AiClient();
   const board = new BoardView();
-  const status = h('p', 'status');
+  const scope = new Scope();
+  const statusLabel = h('span', 'status-text');
+  const dots = h('span', 'dots', undefined, h('i'), h('i'), h('i'));
+  dots.setAttribute('aria-hidden', 'true');
+  const status = h('p', 'status', undefined, statusLabel, dots);
   status.setAttribute('aria-live', 'polite');
   const top = counters('Én', 'dark');
   const bottom = counters('Te', 'white');
@@ -46,7 +58,8 @@ export function mountGame(root: HTMLElement, hooks: GameHooks): { destroy(): voi
     h('div', 'board-wrap', undefined, board.el),
     bottom.el,
   );
-  root.replaceChildren(screen);
+  swapScreen(root, screen);
+  board.playIntro(120);
 
   let state = newGame();
   let selected: number | null = null;
@@ -68,6 +81,25 @@ export function mountGame(root: HTMLElement, hooks: GameHooks): { destroy(): voi
   function destroy(): void {
     over = true;
     ai.terminate();
+    board.destroy();
+    scope.dispose();
+  }
+
+  let lastStatus = '';
+  function setStatus(text: string): void {
+    if (text === lastStatus) return;
+    const first = lastStatus === '';
+    lastStatus = text;
+    statusLabel.textContent = text;
+    if (first) return;
+    scope.play(
+      statusLabel,
+      [
+        { opacity: 0, transform: 'translateY(6px)' },
+        { opacity: 1, transform: 'none' },
+      ],
+      { duration: MOTION.statusFadeMs, easing: EASE.out },
+    );
   }
 
   function refresh(): void {
@@ -89,7 +121,10 @@ export function mountGame(root: HTMLElement, hooks: GameHooks): { destroy(): voi
     }));
     knownMills = new Set(mills.map((m) => m.points.join('-')));
     board.update({ selectable, selected, targets, removable, mills });
-    status.textContent = statusText(state, thinking);
+    setStatus(statusText(state, thinking));
+    status.classList.toggle('thinking', !over && (thinking || state.turn === 1));
+    top.active(!over && state.turn === 1);
+    bottom.active(!over && state.turn === 0);
     top.set(state.toPlace[1], state.onBoard[1]);
     bottom.set(state.toPlace[0], state.onBoard[0]);
   }
@@ -119,7 +154,7 @@ export function mountGame(root: HTMLElement, hooks: GameHooks): { destroy(): voi
     thinking = true;
     refresh();
     while (!over && state.turn === 1) {
-      const pace = delay(500 + Math.random() * 300);
+      const pace = delay(MOTION.aiPaceMinMs + Math.random() * MOTION.aiPaceJitterMs);
       let move: Move | undefined;
       try {
         move = await ai.choose(state, aiOptionsFor(getLevel()));
@@ -129,6 +164,9 @@ export function mountGame(root: HTMLElement, hooks: GameHooks): { destroy(): voi
         move = all[Math.floor(Math.random() * all.length)];
       }
       await pace;
+      // Let the previous animation (landing, mill celebration, capture) finish first.
+      const wait = board.remaining();
+      if (wait > 0) await delay(wait);
       if (!move || over) break;
       play(move);
     }
