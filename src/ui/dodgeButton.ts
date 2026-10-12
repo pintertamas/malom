@@ -25,6 +25,7 @@ export function createDodgeButton(igen: HTMLElement, bubble: HTMLElement): Dodge
   const button = h('button', 'btn no', 'Nem');
   button.type = 'button';
   button.tabIndex = -1;
+  button.style.visibility = 'hidden'; // until placed over the slot
   button.setAttribute('aria-disabled', 'true');
   let moved = false;
   let lastCount = 0;
@@ -36,8 +37,10 @@ export function createDodgeButton(igen: HTMLElement, bubble: HTMLElement): Dodge
     button.style.transform = `translate3d(${x}px, ${y}px, 0)`;
   };
   const home = (): void => {
+    if (moved) return;
     const r = rectOf(slot);
     setPos(r.x, r.y);
+    button.style.visibility = 'visible';
   };
 
   const dodge = (): void => {
@@ -105,7 +108,18 @@ export function createDodgeButton(igen: HTMLElement, bubble: HTMLElement): Dodge
   document.addEventListener('touchmove', onTouch, { passive: true });
   document.addEventListener('touchstart', onTouch, { passive: true });
   window.addEventListener('resize', onResize);
-  requestAnimationFrame(home);
+  window.addEventListener('orientationchange', onResize);
+  // Settle over the placeholder: layout, fonts, the card's rise animation, any later resize.
+  const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(home);
+  const onAnimEnd = (): void => home();
+  requestAnimationFrame(() => {
+    home();
+    requestAnimationFrame(home);
+    ro?.observe(slot);
+    ro?.observe(document.body);
+    slot.closest('.card')?.addEventListener('animationend', onAnimEnd);
+  });
+  void document.fonts?.ready.then(home);
 
   return {
     slot,
@@ -120,6 +134,8 @@ export function createDodgeButton(igen: HTMLElement, bubble: HTMLElement): Dodge
       document.removeEventListener('touchmove', onTouch);
       document.removeEventListener('touchstart', onTouch);
       window.removeEventListener('resize', onResize);
+      window.removeEventListener('orientationchange', onResize);
+      ro?.disconnect();
       button.remove();
     },
   };

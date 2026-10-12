@@ -2,7 +2,7 @@ import type { GameResult, GameState } from '../rules';
 import { phase } from '../rules';
 
 export const INTRO_TEXT =
-  'Szia Enikő! Azt hallottam, te vagy a malom nagymestere. Lássuk, tényleg így van-e! ♟️';
+  'Szia Enikő! Azt mondtad, nem tudlak legyőzni malomban. Lássuk, tényleg így van-e! ♟️';
 export const DATE_QUESTION = 'Mit szólsz? 🌹';
 
 export function endingText(result: GameResult): string {
@@ -10,6 +10,15 @@ export function endingText(result: GameResult): string {
   if (result.winner === 1) return 'Én nyertem, de játszhatunk egy visszavágót élőben. 😏';
   return 'Döntetlen, szóval inkább játsszunk egy visszavágót élőben! ☕';
 }
+
+/** Short result card text for games after the date question was already asked. */
+export function resultCardText(result: GameResult): string {
+  if (result.winner === 0) return 'Nyertél! 🏆';
+  if (result.winner === 1) return 'Ezúttal én nyertem 😏';
+  return 'Döntetlen!';
+}
+
+export const PRACTICE_TEXT = 'Addig is itt tudsz gyakorolni.';
 
 export function statusText(state: GameState, thinking: boolean): string {
   if (state.result) return 'Vége a játéknak';
