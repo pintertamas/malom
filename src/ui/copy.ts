@@ -2,7 +2,7 @@ import type { GameResult, GameState } from '../rules';
 import { phase } from '../rules';
 
 export const INTRO_TEXT =
-  'Szia Enikő! Azt hallottam, te vagy a malom nagymestere. Lássuk, tényleg így van-e! ♟️';
+  'Szia Enikő! Azt mondtad, nem tudlak legyőzni malomban. Lássuk, tényleg így van-e! ♟️';
 export const DATE_QUESTION = 'Mit szólsz? 🌹';
 
 export function endingText(result: GameResult): string {
